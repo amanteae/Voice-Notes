@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>聽寫 · 中文語音辨識</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;900&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper: #eae3d3;
+    --ink: #21201c;
+    --ink-soft: #55524a;
+    --seal: #a8341f;
+    --seal-soft: rgba(168,52,31,0.14);
+    --bamboo: #3f5d46;
+    --line: rgba(33,32,28,0.16);
+    --radius: 4px;
+  }
+
+  *{box-sizing:border-box;}
+
+  html, body{
+    height:100%;
+    margin:0;
+  }
+
+  body{
+    background:
+      radial-gradient(ellipse at 20% -10%, rgba(255,255,255,0.5), transparent 45%),
+      var(--paper);
+    color:var(--ink);
+    font-family:'Noto Sans TC', sans-serif;
+    display:flex;
+    flex-direction:column;
+    height:100vh;
+    height:100dvh;
+    padding:
+      max(12px, env(safe-area-inset-top))
+      max(14px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom))
+      max(14px, env(safe-area-inset-left));
+    overflow:hidden;
+  }
+
+  /* ================= 上方控制列（縮小） ================= */
+  .topbar{
+    flex:0 0 auto;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:8px 10px;
+    background:rgba(255,255,255,0.35);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+  }
+
+  .mic-wrap{
+    position:relative;
+    width:60px;
+    height:60px;
+    flex:0 0 auto;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  .ripple{
+    position:absolute;
+    inset:0;
+    border-radius:50%;
+    border:1px solid var(--seal);
+    opacity:0;
+  }
+  .ripple.active{ animation:ripple-out 2.2s ease-out infinite; }
+  .ripple.r2.active{ animation-delay:0.75s; }
+
+  @keyframes ripple-out{
+    0%{ transform:scale(0.6); opacity:0.5; }
+    100%{ transform:scale(1.35); opacity:0; }
+  }
+
+  .mic-btn{
+    position:relative;
+    z-index:2;
+    width:54px;
+    height:54px;
+    border-radius:50%;
+    border:1.5px solid var(--ink);
+    background:var(--paper);
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:background 0.3s ease, border-color 0.3s ease, transform 0.15s ease;
+    padding:0;
+  }
+  .mic-btn:active{ transform:scale(0.96); }
+  .mic-btn.listening{ background:var(--seal); border-color:var(--seal); }
+
+  .mic-btn svg{
+    width:24px;
+    height:24px;
+    stroke:var(--ink);
+    fill:none;
+    stroke-width:1.8;
+    transition:stroke 0.3s ease;
+  }
+  .mic-btn.listening svg{ stroke:#fff; }
+
+  .status-block{
+    flex:1 1 auto;
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+  }
+  .status{
+    font-size:17px;
+    font-weight:700;
+    color:var(--ink-soft);
+    display:flex;
+    align-items:center;
+    gap:7px;
+  }
+  .status .dot{
+    width:9px;
+    height:9px;
+    border-radius:50%;
+    background:var(--ink-soft);
+    flex:0 0 auto;
+  }
+  .status.on{ color:var(--seal); }
+  .status.on .dot{
+    background:var(--seal);
+    box-shadow:0 0 0 4px var(--seal-soft);
+  }
+  .hint{
+    font-size:13px;
+    color:var(--ink-soft);
+    opacity:0.75;
+  }
+
+  .lang-select{
+    flex:0 0 auto;
+    font-family:'Noto Sans TC', sans-serif;
+    font-size:15px;
+    font-weight:500;
+    color:var(--ink);
+    background:#fff;
+    border:1.5px solid var(--line);
+    border-radius:var(--radius);
+    padding:9px 10px;
+    max-width:118px;
+  }
+
+  .error-box{
+    display:none;
+    flex:0 0 auto;
+    margin-top:10px;
+    border:1px solid var(--seal);
+    background:var(--seal-soft);
+    color:var(--seal);
+    padding:12px 14px;
+    border-radius:var(--radius);
+    font-size:15px;
+    line-height:1.6;
+  }
+  .error-box.show{ display:block; }
+
+  /* ================= 逐字稿主區（佔約 80% 畫面） ================= */
+  .scroll{
+    flex:1 1 auto;
+    min-height:0;
+    margin-top:10px;
+    background:linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.2));
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+
+  .transcript{
+    flex:1 1 auto;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    padding:26px 22px;
+    font-family:'Noto Serif TC', serif;
+    font-size:clamp(26px, 6.2vw, 38px);
+    line-height:1.9;
+    color:var(--ink);
+    white-space:pre-wrap;
+    word-break:break-word;
+  }
+  .transcript .interim{
+    color:var(--ink-soft);
+    border-bottom:2px dashed var(--ink-soft);
+  }
+  .transcript.empty::before{
+    content:"按左上角麥克風開始說話，\A文字會自動顯示在這裡。";
+    white-space:pre-wrap;
+    color:#9a9585;
+    font-family:'Noto Sans TC', sans-serif;
+    font-size:22px;
+    line-height:1.9;
+  }
+
+  .toolbar{
+    flex:0 0 auto;
+    display:flex;
+    gap:10px;
+    padding:12px 14px;
+    border-top:1px solid var(--line);
+    background:rgba(255,255,255,0.4);
+  }
+
+  .btn-big{
+    flex:1;
+    font-family:'Noto Sans TC', sans-serif;
+    font-size:18px;
+    font-weight:700;
+    color:var(--ink);
+    background:#fff;
+    border:1.5px solid var(--line);
+    border-radius:var(--radius);
+    padding:14px 10px;
+    cursor:pointer;
+    transition:border-color 0.2s ease, background 0.2s ease;
+  }
+  .btn-big:active{ background:var(--paper); }
+  .btn-big.primary{
+    border-color:var(--bamboo);
+    color:var(--bamboo);
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .ripple.active{ animation:none !important; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="mic-wrap">
+      <div class="ripple r1"></div>
+      <div class="ripple r2"></div>
+      <button class="mic-btn" id="micBtn" aria-label="開始或停止語音辨識">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="2" width="6" height="12" rx="3"></rect>
+          <path d="M5 10a7 7 0 0 0 14 0"></path>
+          <line x1="12" y1="19" x2="12" y2="22"></line>
+        </svg>
+      </button>
+    </div>
+
+    <div class="status-block">
+      <p class="status" id="status"><span class="dot"></span><span id="statusText">尚未開始</span></p>
+      <p class="hint">按麥克風開始 / 停止</p>
+    </div>
+
+    <select class="lang-select" id="langSelect">
+      <option value="zh-TW" selected>中文（台）</option>
+      <option value="zh-CN">中文（簡）</option>
+      <option value="zh-HK">粵語</option>
+      <option value="en-US">English</option>
+    </select>
+  </div>
+
+  <div class="error-box" id="errorBox"></div>
+
+  <div class="scroll">
+    <div class="transcript empty" id="transcript"></div>
+    <div class="toolbar">
+      <button class="btn-big" id="clearBtn">清空文字</button>
+      <button class="btn-big primary" id="copyBtn">複製文字</button>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const micBtn = document.getElementById('micBtn');
+  const statusWrap = document.getElementById('status');
+  const statusText = document.getElementById('statusText');
+  const transcriptEl = document.getElementById('transcript');
+  const errorBox = document.getElementById('errorBox');
+  const copyBtn = document.getElementById('copyBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const ripples = document.querySelectorAll('.ripple');
+  const langSelect = document.getElementById('langSelect');
+
+  let currentLang = 'zh-TW';
+  let finalText = '';
+  let listening = false;   // 使用者是否「想要」持續聆聽
+  let recognition = null;
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const isSecure = location.protocol === 'https:' || location.hostname === 'localhost';
+
+  function showError(msg){
+    errorBox.textContent = msg;
+    errorBox.classList.add('show');
+  }
+  function hideError(){
+    errorBox.classList.remove('show');
+  }
+
+  if(!isSecure){
+    showError('這個頁面目前不是用 HTTPS 開啟的。iOS Safari 必須在安全連線（https://）或 localhost 底下才能使用麥克風，請把這個檔案放到網頁空間（例如 GitHub Pages）後再用 https 網址開啟。');
+    micBtn.disabled = true;
+    micBtn.style.opacity = '0.4';
+  } else if(!SpeechRecognition){
+    showError('這個瀏覽器不支援語音辨識功能。請改用 Safari 14.5 以上版本、或電腦版 Chrome / Edge 瀏覽器開啟本頁。');
+    micBtn.disabled = true;
+    micBtn.style.opacity = '0.4';
+  } else {
+    setupRecognition();
+  }
+
+  function setupRecognition(){
+    recognition = new SpeechRecognition();
+    recognition.lang = currentLang;
+    // iOS Safari 的 continuous 模式有已知 bug（麥克風卡住、收不到結果），
+    // 改用「單句偵測 + 自動重啟」模擬連續聆聽，所有瀏覽器都適用。
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onstart = function(){
+      hideError();
+      micBtn.classList.add('listening');
+      ripples.forEach(r => r.classList.add('active'));
+      statusWrap.classList.add('on');
+      statusText.textContent = '聆聽中…';
+    };
+
+    recognition.onend = function(){
+      if(listening){
+        try{ recognition.start(); }
+        catch(err){ listening = false; resetUI(); }
+      } else {
+        resetUI();
+      }
+    };
+
+    recognition.onerror = function(e){
+      let msg = '';
+      if(e.error === 'not-allowed' || e.error === 'permission-denied'){
+        msg = '無法取得麥克風權限，請到「設定 → Safari → 麥克風」允許存取後再試一次。';
+        listening = false;
+      } else if(e.error === 'no-speech' || e.error === 'aborted'){
+        return;
+      } else if(e.error === 'network'){
+        msg = '網路連線異常，語音辨識暫時無法使用。';
+      } else {
+        msg = '發生錯誤：' + e.error;
+      }
+      if(msg) showError(msg);
+    };
+
+    recognition.onresult = function(event){
+      let interim = '';
+      for(let i = event.resultIndex; i < event.results.length; i++){
+        const result = event.results[i];
+        if(result.isFinal){
+          finalText += result[0].transcript;
+        } else {
+          interim += result[0].transcript;
+        }
+      }
+      renderTranscript(interim);
+    };
+  }
+
+  function resetUI(){
+    micBtn.classList.remove('listening');
+    ripples.forEach(r => r.classList.remove('active'));
+    statusWrap.classList.remove('on');
+    statusText.textContent = '尚未開始';
+    renderTranscript('');
+  }
+
+  function renderTranscript(interim){
+    if(!finalText && !interim){
+      transcriptEl.classList.add('empty');
+      transcriptEl.innerHTML = '';
+      return;
+    }
+    transcriptEl.classList.remove('empty');
+    const safeFinal = escapeHtml(finalText);
+    const safeInterim = escapeHtml(interim);
+    transcriptEl.innerHTML = safeFinal + (safeInterim ? '<span class="interim">' + safeInterim + '</span>' : '');
+    transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  }
+
+  function escapeHtml(str){
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  micBtn.addEventListener('click', function(){
+    if(!recognition) return;
+    if(listening){
+      listening = false;
+      recognition.stop();
+    } else {
+      listening = true;
+      try{
+        recognition.lang = currentLang;
+        recognition.start();
+      } catch(err){
+        listening = false;
+        showError('無法啟動語音辨識，請重新整理頁面再試一次。');
+      }
+    }
+  });
+
+  langSelect.addEventListener('change', function(){
+    currentLang = langSelect.value;
+    if(listening && recognition){
+      recognition.stop(); // onend 會用新語言自動重啟
+    }
+  });
+
+  copyBtn.addEventListener('click', function(){
+    if(!finalText){ return; }
+    navigator.clipboard.writeText(finalText).then(function(){
+      const old = copyBtn.textContent;
+      copyBtn.textContent = '已複製';
+      setTimeout(() => { copyBtn.textContent = old; }, 1400);
+    });
+  });
+
+  clearBtn.addEventListener('click', function(){
+    finalText = '';
+    renderTranscript('');
+  });
+})();
+</script>
+
+</body>
+</html>
