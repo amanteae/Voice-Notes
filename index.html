@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI 即時語音字幕助手</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        hcBg: '#000000',
+                        hcCard: '#18181b',
+                        hcYellow: '#FFFF00',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+            -webkit-tap-highlight-color: transparent;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: rgba(156, 163, 175, 0.4);
+            border-radius: 9999px;
+        }
+        @keyframes wave {
+            0%, 100% { transform: scaleY(0.4); }
+            50% { transform: scaleY(1.2); }
+        }
+        .mic-anim-1 { animation: wave 1.2s infinite ease-in-out 0s; }
+        .mic-anim-2 { animation: wave 1.2s infinite ease-in-out 0.2s; }
+        .mic-anim-3 { animation: wave 1.2s infinite ease-in-out 0.4s; }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-black text-gray-800 dark:text-gray-100 h-full flex flex-col justify-between transition-colors duration-200">
+
+    <!-- Header Toolbar -->
+    <header class="bg-white dark:bg-hcCard shadow-md p-3 sm:p-4 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 dark:border-gray-800">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-xl shadow-md">
+                <i class="fa-solid fa-ear-listen"></i>
+            </div>
+            <div>
+                <h1 class="text-base sm:text-lg font-extrabold tracking-tight dark:text-yellow-300">AI 即時字幕助手</h1>
+                <p class="text-xs text-gray-500 dark:text-gray-400">iOS Safari 開箱即用 • 聽障長者友善</p>
+            </div>
+        </div>
+
+        <!-- Controls: Font, Contrast, Export, Clear -->
+        <div class="flex items-center gap-2 flex-wrap">
+            <!-- Font Size Adjuster -->
+            <div class="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-1 border border-gray-300 dark:border-gray-700">
+                <button id="btnFontDec" class="w-9 h-9 flex items-center justify-center font-black rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 text-base active:scale-95 transition" title="縮小字體">
+                    A-
+                </button>
+                <span id="fontSizeDisplay" class="px-2 text-xs sm:text-sm font-bold min-w-[3rem] text-center dark:text-yellow-300">28px</span>
+                <button id="btnFontInc" class="w-9 h-9 flex items-center justify-center font-black rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 text-xl active:scale-95 transition" title="放大字體">
+                    A+
+                </button>
+            </div>
+
+            <!-- High Contrast Toggle -->
+            <button id="btnHighContrast" class="p-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-extrabold flex items-center gap-1.5 text-xs sm:text-sm shadow active:scale-95 transition">
+                <i class="fa-solid fa-circle-half-stroke"></i>
+                <span class="hidden sm:inline">高對比模式</span>
+            </button>
+
+            <!-- Export -->
+            <button id="btnExport" class="p-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 text-xs sm:text-sm shadow active:scale-95 transition">
+                <i class="fa-solid fa-file-export"></i>
+                <span>匯出紀錄</span>
+            </button>
+
+            <!-- Clear -->
+            <button id="btnClear" class="p-2 px-3 rounded-xl bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 hover:bg-red-200 font-bold text-xs sm:text-sm active:scale-95 transition" title="清空紀錄">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Stream -->
+    <main class="flex-1 overflow-y-auto p-3 sm:p-6 space-y-4 relative" id="transcriptContainer">
+        
+        <!-- Welcome Prompt -->
+        <div id="welcomeBanner" class="bg-blue-50 dark:bg-gray-900 border-2 border-blue-200 dark:border-yellow-500/40 p-4 rounded-2xl shadow-sm text-sm text-blue-900 dark:text-yellow-200 flex justify-between items-start">
+            <div class="flex items-start space-x-3">
+                <i class="fa-solid fa-circle-info text-blue-500 dark:text-yellow-400 text-xl mt-0.5"></i>
+                <div>
+                    <strong class="font-extrabold text-base">提示：點擊下方藍色麥克風即可直接使用！</strong>
+                    <p class="mt-1 text-xs sm:text-sm opacity-90">首次使用請授權 Safari 存取麥克風。說話者切換可隨時在底部點選切換。</p>
+                </div>
+            </div>
+            <button onclick="document.getElementById('welcomeBanner').remove()" class="text-gray-400 hover:text-gray-600 p-1">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- Transcript Cards List -->
+        <div id="transcriptList" class="space-y-4"></div>
+
+        <!-- Real-time Pending Stream (Interim) -->
+        <div id="interimBox" class="hidden bg-yellow-100 dark:bg-yellow-950/60 border-2 border-dashed border-yellow-500 p-4 rounded-2xl transition-all">
+            <div class="flex items-center justify-between mb-2">
+                <span id="interimSpeakerBadge" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-black bg-yellow-300 text-yellow-950">
+                    <i class="fa-solid fa-microphone-lines mr-1.5 animate-pulse"></i> 正在收音辨識...
+                </span>
+                <div class="flex items-center space-x-1">
+                    <span class="w-1.5 h-4 bg-yellow-600 dark:bg-yellow-400 rounded-full mic-anim-1"></span>
+                    <span class="w-1.5 h-4 bg-yellow-600 dark:bg-yellow-400 rounded-full mic-anim-2"></span>
+                    <span class="w-1.5 h-4 bg-yellow-600 dark:bg-yellow-400 rounded-full mic-anim-3"></span>
+                </div>
+            </div>
+            <p id="interimText" class="subtitle-text text-yellow-950 dark:text-yellow-100 font-medium italic leading-relaxed" style="font-size: 28px;">
+                ...
+            </p>
+        </div>
+
+        <!-- Scroll Lock Floating Button -->
+        <button id="btnScrollToBottom" class="hidden fixed bottom-36 right-6 z-30 bg-blue-600 dark:bg-yellow-400 dark:text-black text-white p-3.5 rounded-full shadow-2xl hover:bg-blue-700 active:scale-95 transition flex items-center justify-center">
+            <i class="fa-solid fa-arrow-down text-xl"></i>
+        </button>
+    </main>
+
+    <!-- Bottom Controls & Speaker Switcher -->
+    <footer class="bg-white dark:bg-hcCard border-t border-gray-200 dark:border-gray-800 shadow-2xl p-3 sm:p-4 z-20 space-y-3">
+        
+        <!-- Speaker Switcher Bar -->
+        <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-black text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">
+                <i class="fa-solid fa-user-tag mr-1"></i> 目前說話者:
+            </span>
+            
+            <div id="speakerSelector" class="flex items-center gap-2 overflow-x-auto py-1 scrollbar-none flex-1">
+                <!-- JS Populated Buttons -->
+            </div>
+
+            <!-- Manage Speakers -->
+            <button id="btnEditSpeakers" class="px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-700 text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 whitespace-nowrap">
+                <i class="fa-solid fa-gear mr-1"></i> 管理角色
+            </button>
+        </div>
+
+        <!-- Main Recording Trigger & Config -->
+        <div class="flex items-center justify-between gap-2 sm:gap-4 pt-1">
+            <!-- Auto Scroll Toggle -->
+            <button id="btnAutoScroll" class="flex items-center space-x-1.5 text-xs font-bold px-3 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200">
+                <i class="fa-solid fa-lock text-emerald-500" id="scrollIcon"></i>
+                <span id="scrollText" class="hidden sm:inline">自動捲動: 開</span>
+            </button>
+
+            <!-- Big Mic Button -->
+            <button id="btnToggleRecord" class="flex-1 max-w-sm mx-auto py-3.5 px-6 rounded-2xl bg-blue-600 dark:bg-yellow-400 dark:text-black hover:bg-blue-700 text-white font-extrabold text-base sm:text-lg shadow-lg flex items-center justify-center gap-3 transition-all active:scale-95">
+                <i class="fa-solid fa-microphone text-xl" id="micIcon"></i>
+                <span id="micStatusText">點擊開始聽取字幕</span>
+            </button>
+
+            <!-- Language Selector -->
+            <select id="langSelect" class="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl text-xs font-bold p-2 text-gray-700 dark:text-gray-200">
+                <option value="zh-TW" selected>繁體中文</option>
+                <option value="zh-CN">簡體中文</option>
+                <option value="en-US">English</option>
+                <option value="ja-JP">日本語</option>
+            </select>
+        </div>
+    </footer>
+
+    <!-- Speaker Edit Modal -->
+    <div id="speakerModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-hcCard rounded-3xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-gray-200 dark:border-gray-800">
+            <div class="flex justify-between items-center border-b pb-3 dark:border-gray-800">
+                <h3 class="text-lg font-extrabold text-gray-900 dark:text-yellow-300">管理發音人角色</h3>
+                <button id="btnCloseModal" class="text-gray-400 hover:text-gray-600 text-xl">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div id="modalSpeakerList" class="space-y-3 max-h-60 overflow-y-auto pr-1"></div>
+
+            <div class="flex gap-2 pt-2">
+                <input type="text" id="newSpeakerName" placeholder="新增角色名稱 (例如: 護理師)" class="flex-1 border rounded-xl px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:border-blue-500">
+                <button id="btnAddSpeaker" class="bg-blue-600 text-white dark:bg-yellow-400 dark:text-black px-4 py-2 rounded-xl font-bold text-sm hover:opacity-90">
+                    新增
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div id="exportModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-hcCard rounded-3xl shadow-2xl max-w-lg w-full p-6 space-y-4 border border-gray-200 dark:border-gray-800">
+            <div class="flex justify-between items-center border-b pb-3 dark:border-gray-800">
+                <h3 class="text-lg font-extrabold text-gray-900 dark:text-yellow-300">
+                    <i class="fa-solid fa-file-export mr-2 text-emerald-500"></i>匯出逐字稿
+                </h3>
+                <button id="btnCloseExportModal" class="text-gray-400 hover:text-gray-600 text-xl">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <textarea id="exportPreviewText" readonly class="w-full h-48 border rounded-2xl p-3 text-xs font-mono bg-gray-50 dark:bg-black dark:text-yellow-200 border-gray-300 dark:border-gray-800 focus:outline-none"></textarea>
+
+            <div class="flex gap-3 justify-end pt-2">
+                <button id="btnCopyClipboard" class="flex-1 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 text-gray-800 dark:text-gray-100 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-copy"></i> 複製剪貼簿
+                </button>
+                <button id="btnDownloadTxt" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-download"></i> 下載文字檔
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="hidden fixed top-20 left-1/2 -translate-x-1/2 bg-gray-900 dark:bg-yellow-400 dark:text-black text-white text-sm px-5 py-3 rounded-full shadow-2xl z-50 flex items-center gap-2 transition-opacity duration-300 font-bold">
+        <i class="fa-solid fa-circle-check text-green-400 dark:text-black"></i>
+        <span id="toastMsg">通知訊息</span>
+    </div>
+
+    <!-- Main Logic -->
+    <script>
+        // Preset default speakers with high contrast colors
+        let speakers = [
+            { id: 'spk1', name: '說話者 A (媽媽)', color: 'bg-amber-500', textColor: 'text-amber-950', lightBg: 'bg-amber-50 dark:bg-amber-950/40', border: 'border-amber-400' },
+            { id: 'spk2', name: '說話者 B (醫生)', color: 'bg-cyan-500', textColor: 'text-cyan-950', lightBg: 'bg-cyan-50 dark:bg-cyan-950/40', border: 'border-cyan-400' },
+            { id: 'spk3', name: '說話者 C (自己)', color: 'bg-emerald-500', textColor: 'text-emerald-950', lightBg: 'bg-emerald-50 dark:bg-emerald-950/40', border: 'border-emerald-400' }
+        ];
+
+        let activeSpeakerId = 'spk1';
+        let currentFontSize = 28; // Default font size
+        let isRecording = false;
+        let autoScroll = true;
+        let isHighContrast = false;
+        let recognition = null;
+        let transcriptData = [];
+
+        // DOM Selectors
+        const transcriptContainer = document.getElementById('transcriptContainer');
+        const transcriptList = document.getElementById('transcriptList');
+        const interimBox = document.getElementById('interimBox');
+        const interimText = document.getElementById('interimText');
+        const interimSpeakerBadge = document.getElementById('interimSpeakerBadge');
+        
+        const btnToggleRecord = document.getElementById('btnToggleRecord');
+        const micIcon = document.getElementById('micIcon');
+        const micStatusText = document.getElementById('micStatusText');
+        
+        const fontSizeDisplay = document.getElementById('fontSizeDisplay');
+        const btnFontDec = document.getElementById('btnFontDec');
+        const btnFontInc = document.getElementById('btnFontInc');
+        const btnHighContrast = document.getElementById('btnHighContrast');
+        
+        const btnAutoScroll = document.getElementById('btnAutoScroll');
+        const scrollIcon = document.getElementById('scrollIcon');
+        const scrollText = document.getElementById('scrollText');
+        const btnScrollToBottom = document.getElementById('btnScrollToBottom');
+        
+        const speakerSelector = document.getElementById('speakerSelector');
+        const langSelect = document.getElementById('langSelect');
+        const btnClear = document.getElementById('btnClear');
+        const btnExport = document.getElementById('btnExport');
+
+        const speakerModal = document.getElementById('speakerModal');
+        const btnEditSpeakers = document.getElementById('btnEditSpeakers');
+        const btnCloseModal = document.getElementById('btnCloseModal');
+        const modalSpeakerList = document.getElementById('modalSpeakerList');
+        const newSpeakerName = document.getElementById('newSpeakerName');
+        const btnAddSpeaker = document.getElementById('btnAddSpeaker');
+
+        const exportModal = document.getElementById('exportModal');
+        const btnCloseExportModal = document.getElementById('btnCloseExportModal');
+        const exportPreviewText = document.getElementById('exportPreviewText');
+        const btnCopyClipboard = document.getElementById('btnCopyClipboard');
+        const btnDownloadTxt = document.getElementById('btnDownloadTxt');
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initSpeechRecognition();
+            renderSpeakerButtons();
+            updateFontSizeUI();
+
+            btnFontDec.addEventListener('click', () => changeFontSize(-2));
+            btnFontInc.addEventListener('click', () => changeFontSize(2));
+            btnHighContrast.addEventListener('click', toggleHighContrast);
+            btnToggleRecord.addEventListener('click', toggleRecording);
+            
+            btnAutoScroll.addEventListener('click', toggleAutoScroll);
+            btnScrollToBottom.addEventListener('click', scrollToBottom);
+            transcriptContainer.addEventListener('scroll', handleContainerScroll);
+
+            btnClear.addEventListener('click', clearTranscripts);
+            btnExport.addEventListener('click', openExportModal);
+
+            btnEditSpeakers.addEventListener('click', openSpeakerModal);
+            btnCloseModal.addEventListener('click', () => speakerModal.classList.add('hidden'));
+            btnAddSpeaker.addEventListener('click', addNewSpeaker);
+
+            btnCloseExportModal.addEventListener('click', () => exportModal.classList.add('hidden'));
+            btnCopyClipboard.addEventListener('click', copyToClipboard);
+            btnDownloadTxt.addEventListener('click', downloadTxtFile);
+        });
+
+        // Initialize Web Speech API for Safari compatibility
+        function initSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            if (!SpeechRecognition) {
+                showToast('您的瀏覽器不支援 Web Speech 語音識別。請嘗試使用最新的 iOS Safari。');
+                btnToggleRecord.disabled = true;
+                btnToggleRecord.classList.add('opacity-50', 'cursor-not-allowed');
+                return;
+            }
+
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = langSelect.value;
+
+            langSelect.addEventListener('change', () => {
+                recognition.lang = langSelect.value;
+                if (isRecording) {
+                    recognition.stop();
+                    setTimeout(() => recognition.start(), 300);
+                }
+            });
+
+            recognition.onstart = () => {
+                isRecording = true;
+                updateMicUI(true);
+                showToast('已開始語音聽取');
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                if (event.error === 'not-allowed') {
+                    showToast('請允許 Safari 使用麥克風權限以轉換字幕。');
+                    stopRecordingUI();
+                }
+            };
+
+            recognition.onend = () => {
+                if (isRecording) {
+                    try {
+                        recognition.start();
+                    } catch (e) {
+                        console.log('Restarting recognition...', e);
+                    }
+                } else {
+                    stopRecordingUI();
+                }
+            };
+
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+                let finalTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript;
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+
+                if (interimTranscript.trim().length > 0) {
+                    interimBox.classList.remove('hidden');
+                    interimText.innerText = interimTranscript;
+                    const activeSpk = getActiveSpeaker();
+                    interimSpeakerBadge.innerText = `🎙️ ${activeSpk.name} (說話中...)`;
+                    if (autoScroll) scrollToBottom();
+                } else {
+                    interimBox.classList.add('hidden');
+                }
+
+                if (finalTranscript.trim().length > 0) {
+                    interimBox.classList.add('hidden');
+                    addTranscriptCard(finalTranscript.trim());
+                }
+            };
+        }
+
+        function renderSpeakerButtons() {
+            speakerSelector.innerHTML = '';
+            speakers.forEach(spk => {
+                const isActive = spk.id === activeSpeakerId;
+                const btn = document.createElement('button');
+                btn.className = `px-3.5 py-2 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center gap-1.5 whitespace-nowrap active:scale-95 ${
+                    isActive 
+                        ? `${spk.color} text-white shadow-md ring-2 ring-offset-1 ring-blue-500 scale-105 dark:ring-yellow-400` 
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
+                }`;
+                btn.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-current"></span> ${spk.name}`;
+                btn.onclick = () => selectSpeaker(spk.id);
+                speakerSelector.appendChild(btn);
+            });
+        }
+
+        function selectSpeaker(id) {
+            activeSpeakerId = id;
+            renderSpeakerButtons();
+            showToast(`已切換說話者：${getActiveSpeaker().name}`);
+        }
+
+        function getActiveSpeaker() {
+            return speakers.find(s => s.id === activeSpeakerId) || speakers[0];
+        }
+
+        function toggleRecording() {
+            if (!recognition) return;
+
+            if (isRecording) {
+                isRecording = false;
+                recognition.stop();
+                stopRecordingUI();
+                showToast('已停止聽取');
+            } else {
+                try {
+                    recognition.start();
+                } catch (err) {
+                    console.error('Start error:', err);
+                }
+            }
+        }
+
+        function updateMicUI(recording) {
+            if (recording) {
+                btnToggleRecord.className = 'flex-1 max-w-sm mx-auto py-3.5 px-6 rounded-2xl bg-red-600 text-white font-black text-base sm:text-lg shadow-lg flex items-center justify-center gap-3 transition-all active:scale-95 animate-pulse';
+                micIcon.className = 'fa-solid fa-microphone-slash text-xl';
+                micStatusText.innerText = '停止聽取';
+            } else {
+                btnToggleRecord.className = 'flex-1 max-w-sm mx-auto py-3.5 px-6 rounded-2xl bg-blue-600 dark:bg-yellow-400 dark:text-black text-white font-black text-base sm:text-lg shadow-lg flex items-center justify-center gap-3 transition-all active:scale-95';
+                micIcon.className = 'fa-solid fa-microphone text-xl';
+                micStatusText.innerText = '點擊開始聽取字幕';
+            }
+        }
+
+        function stopRecordingUI() {
+            isRecording = false;
+            updateMicUI(false);
+            interimBox.classList.add('hidden');
+        }
+
+        function addTranscriptCard(text) {
+            const spk = getActiveSpeaker();
+            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const cardId = Date.now();
+
+            const entry = {
+                id: cardId,
+                timestamp,
+                speakerName: spk.name,
+                text
+            };
+
+            transcriptData.push(entry);
+
+            const card = document.createElement('div');
+            card.id = `card-${cardId}`;
+            card.className = `p-4 sm:p-5 rounded-2xl shadow-sm border transition-all ${spk.lightBg} ${spk.border} border-l-8 relative group`;
+            card.innerHTML = `
+                <div class="flex items-center justify-between mb-2">
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-black text-white ${spk.color}">
+                        ${spk.name}
+                    </span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-gray-400 dark:text-gray-400 font-mono">${timestamp}</span>
+                        <button onclick="deleteCard(${cardId})" class="text-gray-400 hover:text-red-500 p-1 opacity-70 hover:opacity-100" title="刪除單條">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <p class="subtitle-text text-gray-900 dark:text-yellow-100 font-medium leading-relaxed" style="font-size: ${currentFontSize}px;">
+                    ${escapeHtml(text)}
+                </p>
+            `;
+
+            transcriptList.appendChild(card);
+            if (autoScroll) scrollToBottom();
+        }
+
+        function deleteCard(id) {
+            transcriptData = transcriptData.filter(item => item.id !== id);
+            const el = document.getElementById(`card-${id}`);
+            if (el) el.remove();
+            showToast('已刪除該條字幕');
+        }
+
+        function changeFontSize(delta) {
+            currentFontSize = Math.min(Math.max(currentFontSize + delta, 18), 48);
+            updateFontSizeUI();
+        }
+
+        function updateFontSizeUI() {
+            fontSizeDisplay.innerText = `${currentFontSize}px`;
+            const textElements = document.querySelectorAll('.subtitle-text');
+            textElements.forEach(el => {
+                el.style.fontSize = `${currentFontSize}px`;
+            });
+        }
+
+        function toggleHighContrast() {
+            isHighContrast = !isHighContrast;
+            if (isHighContrast) {
+                document.documentElement.classList.add('dark');
+                showToast('已開啟高對比模式');
+            } else {
+                document.documentElement.classList.remove('dark');
+                showToast('已關閉高對比模式');
+            }
+        }
+
+        function toggleAutoScroll() {
+            autoScroll = !autoScroll;
+            scrollIcon.className = autoScroll ? 'fa-solid fa-lock text-emerald-500' : 'fa-solid fa-lock-open text-gray-400';
+            scrollText.innerText = autoScroll ? '自動捲動: 開' : '自動捲動: 關';
+            if (autoScroll) scrollToBottom();
+        }
+
+        function scrollToBottom() {
+            transcriptContainer.scrollTo({
+                top: transcriptContainer.scrollHeight,
+                behavior: 'smooth'
+            });
+        }
+
+        function handleContainerScroll() {
+            const isAtBottom = transcriptContainer.scrollHeight - transcriptContainer.scrollTop <= transcriptContainer.clientHeight + 80;
+            if (isAtBottom) {
+                btnScrollToBottom.classList.add('hidden');
+            } else {
+                btnScrollToBottom.classList.remove('hidden');
+            }
+        }
+
+        function clearTranscripts() {
+            if (transcriptData.length === 0) return;
+            if (confirm('確定要清空所有紀錄嗎？')) {
+                transcriptData = [];
+                transcriptList.innerHTML = '';
+                showToast('已清空對話紀錄');
+            }
+        }
+
+        function openSpeakerModal() {
+            modalSpeakerList.innerHTML = '';
+            speakers.forEach((spk) => {
+                const row = document.createElement('div');
+                row.className = 'flex items-center justify-between gap-2 p-2 rounded-xl bg-gray-100 dark:bg-gray-800';
+                row.innerHTML = `
+                    <div class="flex items-center gap-2 flex-1">
+                        <span class="w-4 h-4 rounded-full ${spk.color}"></span>
+                        <input type="text" value="${escapeHtml(spk.name)}" onchange="updateSpeakerName('${spk.id}', this.value)" class="flex-1 bg-transparent border-b border-gray-300 dark:border-gray-700 px-1 text-sm dark:text-white font-bold focus:outline-none focus:border-blue-500">
+                    </div>
+                    ${speakers.length > 1 ? `<button onclick="deleteSpeaker('${spk.id}')" class="text-red-500 hover:text-red-700 p-1.5"><i class="fa-solid fa-trash"></i></button>` : ''}
+                `;
+                modalSpeakerList.appendChild(row);
+            });
+            speakerModal.classList.remove('hidden');
+        }
+
+        function updateSpeakerName(id, newName) {
+            if (!newName.trim()) return;
+            const spk = speakers.find(s => s.id === id);
+            if (spk) {
+                spk.name = newName.trim();
+                renderSpeakerButtons();
+            }
+        }
+
+        function addNewSpeaker() {
+            const name = newSpeakerName.value.trim();
+            if (!name) return;
+
+            const palette = [
+                { color: 'bg-purple-500', lightBg: 'bg-purple-50 dark:bg-purple-950/40', border: 'border-purple-400' },
+                { color: 'bg-rose-500', lightBg: 'bg-rose-50 dark:bg-rose-950/40', border: 'border-rose-400' },
+                { color: 'bg-indigo-500', lightBg: 'bg-indigo-50 dark:bg-indigo-950/40', border: 'border-indigo-400' }
+            ];
+            const colorSet = palette[speakers.length % palette.length];
+
+            const newSpk = {
+                id: 'spk_' + Date.now(),
+                name,
+                color: colorSet.color,
+                lightBg: colorSet.lightBg,
+                border: colorSet.border
+            };
+
+            speakers.push(newSpk);
+            newSpeakerName.value = '';
+            renderSpeakerButtons();
+            openSpeakerModal();
+        }
+
+        function deleteSpeaker(id) {
+            speakers = speakers.filter(s => s.id !== id);
+            if (activeSpeakerId === id) {
+                activeSpeakerId = speakers[0].id;
+            }
+            renderSpeakerButtons();
+            openSpeakerModal();
+        }
+
+        function openExportModal() {
+            if (transcriptData.length === 0) {
+                showToast('目前尚無字幕紀錄');
+                return;
+            }
+            const text = transcriptData.map(item => `[${item.timestamp}] ${item.speakerName}: ${item.text}`).join('\n\n');
+            exportPreviewText.value = text;
+            exportModal.classList.remove('hidden');
+        }
+
+        function copyToClipboard() {
+            const text = exportPreviewText.value;
+            if (!text) return;
+            
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showToast('已成功複製到剪貼簿！');
+            } catch (err) {
+                showToast('複製失敗');
+            }
+            document.body.removeChild(textarea);
+        }
+
+        function downloadTxtFile() {
+            const text = exportPreviewText.value;
+            if (!text) return;
+
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `語音字幕紀錄_${new Date().toISOString().slice(0, 10)}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('檔案已開始下載');
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').innerText = msg;
+            toast.classList.remove('hidden');
+            toast.style.opacity = '1';
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.classList.add('hidden'), 300);
+            }, 2500);
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/[&<>"']/g, function(m) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;'
+                }[m];
+            });
+        }
+    </script>
+</body>
+</html>
